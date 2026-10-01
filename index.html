@@ -1,0 +1,1779 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Ghost Audio — Fase 1</title>
+<style>
+/*
+ * Design direction (see /mnt/skills/public/frontend-design/SKILL.md):
+ * this reads as field instrumentation, not a lifestyle fitness app — a
+ * sports-timing/stopwatch feel, because that is what the object actually
+ * is: something glanced at for a few seconds before and after a run, not
+ * something anyone lingers on. High contrast for outdoor daylight, large
+ * unambiguous touch targets, tabular numerals on every readout, one
+ * accent color used only for the thing that matters right now.
+ *
+ * No external fonts or assets: this file is inlined into a single-file
+ * artifact meant to work with zero network dependencies once loaded.
+ */
+
+:root {
+  --bg: #12151a;
+  --bg-raised: #1b1f26;
+  --text: #e9e7e2;
+  --text-dim: #9aa0aa;
+  --accent: #d9a441;
+  --accent-text: #12151a;
+  --ok: #5fb98c;
+  --warn: #d9a441;
+  --bad: #c96a5a;
+  --border: #2a2f38;
+  --radius: 10px;
+  --sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.45;
+  -webkit-tap-highlight-color: transparent;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.wrap {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 20px 20px 40px;
+}
+
+h1 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  margin: 0 0 4px;
+}
+
+.subtitle {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  margin: 0 0 24px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.field {
+  margin-bottom: 16px;
+}
+
+label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+input[type='text'],
+select,
+textarea {
+  width: 100%;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+input[type='file'] {
+  width: 100%;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.gpx-summary {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+fieldset {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin: 20px 0;
+}
+
+fieldset legend {
+  padding: 0 6px;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.status-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  margin: 16px 0;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  flex: none;
+}
+
+.error-text {
+  color: var(--bad);
+  font-size: 0.85rem;
+  min-height: 1.2em;
+  margin: 8px 0 4px;
+}
+
+button {
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  border-radius: var(--radius);
+  border: none;
+  padding: 15px 18px;
+  cursor: pointer;
+}
+
+.btn-primary {
+  width: 100%;
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.btn-primary:disabled {
+  background: var(--border);
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  width: 100%;
+  background: var(--bg-raised);
+  color: var(--text);
+  border: 1px solid var(--border);
+  margin-top: 10px;
+}
+
+.btn-danger {
+  width: 100%;
+  background: var(--bad);
+  color: #1a1210;
+}
+
+.banner {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 20px;
+  font-size: 0.9rem;
+}
+
+.banner-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+.banner-actions button {
+  flex: 1;
+  padding: 10px;
+  font-size: 0.85rem;
+}
+
+/* --- Running screen: this is the one screen designed to be readable at
+   arm's length in daylight, in the rare case the runner glances at it. --- */
+.running-center {
+  text-align: center;
+  padding: 40px 0 30px;
+}
+
+.big-timer {
+  font-size: 4.2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.running-distance {
+  font-size: 1.3rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  margin-top: 10px;
+}
+
+.running-gap {
+  font-size: 1.1rem;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  min-height: 1.4em;
+  margin-top: 14px;
+}
+
+.running-quality {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  margin-top: 6px;
+}
+
+/* --- Questionnaire: a 1-7 scale rendered as equal-width radio buttons. --- */
+.scale {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.scale label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  margin: 0;
+}
+
+.scale input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+.scale-endpoints {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+.rpe-select {
+  width: 100%;
+}
+
+.q-block {
+  margin-bottom: 22px;
+}
+
+.q-prompt {
+  font-size: 0.95rem;
+  margin-bottom: 4px;
+}
+
+.export-summary {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  font-size: 0.95rem;
+  margin-bottom: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fallback-details {
+  margin-top: 18px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+.fallback-details summary {
+  cursor: pointer;
+  padding: 4px 0;
+}
+.fallback-textarea {
+  width: 100%;
+  min-height: 140px;
+  margin-top: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+}
+
+.footnote {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  margin-top: 28px;
+  line-height: 1.5;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="recovery-banner" class="banner hidden">
+    Encontrámos dados de uma sessão anterior que não chegou a ser exportada.
+    <div class="banner-actions">
+      <button id="btn-recover" class="btn-secondary" type="button">Recuperar</button>
+      <button id="btn-discard-recovery" class="btn-secondary" type="button">Descartar</button>
+    </div>
+  </div>
+
+  <!-- ============================== SETUP ============================== -->
+  <section id="screen-setup">
+    <h1>Ghost Audio</h1>
+    <p class="subtitle">Fase 1 — protótipo de investigação, sem AR.</p>
+
+    <div class="row-2">
+      <div class="field">
+        <label for="pid">Participant ID</label>
+        <input type="text" id="pid" placeholder="P07" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="group">Grupo</label>
+        <select id="group">
+          <option value="A">A</option>
+          <option value="B">B</option>
+          <option value="C">C</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row-2">
+      <div class="field">
+        <label for="sequence">Sequência</label>
+        <input type="text" id="sequence" placeholder="ex.: GCCG" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="session">Sessão</label>
+        <select id="session">
+          <option value="S0">S0 (familiarização)</option>
+          <option value="S1">S1</option>
+          <option value="S2">S2</option>
+          <option value="S3">S3</option>
+          <option value="S4">S4</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="condition">Condição desta sessão</label>
+      <select id="condition">
+        <option value="control">Control (sem Ghost)</option>
+        <option value="ghost">Ghost</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="route-label">Percurso</label>
+      <input type="text" id="route-label" placeholder="ex.: Parque da Cidade — circuito A" autocomplete="off" />
+    </div>
+
+    <div class="field">
+      <label for="gpx-file">GPX do percurso / Ghost (com timestamps para a condição Ghost)</label>
+      <input type="file" id="gpx-file" accept=".gpx" />
+      <div id="gpx-summary" class="gpx-summary"></div>
+    </div>
+
+    <fieldset>
+      <legend>Ferramentas de desenvolvimento</legend>
+      <div class="field">
+        <label for="sim-gpx-file">Simular GPS a partir de um GPX (opcional — testar sem sair de casa)</label>
+        <input type="file" id="sim-gpx-file" accept=".gpx" />
+      </div>
+      <div class="field">
+        <label for="sim-speed">Velocidade da simulação</label>
+        <select id="sim-speed">
+          <option value="1">1×</option>
+          <option value="5">5×</option>
+          <option value="20">20×</option>
+        </select>
+      </div>
+    </fieldset>
+
+    <div class="status-line">
+      <span class="status-dot" id="gps-dot"></span>
+      <span id="gps-status">A procurar GPS…</span>
+    </div>
+
+    <div id="setup-error" class="error-text"></div>
+    <button id="btn-start" class="btn-primary" type="button" disabled>Iniciar</button>
+  </section>
+
+  <!-- ============================= RUNNING ============================== -->
+  <section id="screen-running" class="hidden">
+    <div class="running-center">
+      <div class="big-timer" id="running-elapsed">0:00</div>
+      <div class="running-distance" id="running-distance">0.00 km</div>
+      <div class="running-gap" id="running-gap"></div>
+      <div class="running-quality" id="running-quality"></div>
+    </div>
+    <button id="btn-terminar" class="btn-danger" type="button">Terminar sessão</button>
+  </section>
+
+  <!-- ========================== QUESTIONNAIRE =========================== -->
+  <section id="screen-questionnaire" class="hidden">
+    <h1>Questionário pós-sessão</h1>
+    <p class="subtitle">Responder imediatamente após a corrida.</p>
+
+    <form id="questionnaire-form">
+
+      <div class="q-block">
+        <div class="q-prompt">P1. Quanto tiveste vontade de continuar a correr?</div>
+        <div class="scale">
+          <label><input type="radio" name="p1" value="1" required />1</label>
+          <label><input type="radio" name="p1" value="2" />2</label>
+          <label><input type="radio" name="p1" value="3" />3</label>
+          <label><input type="radio" name="p1" value="4" />4</label>
+          <label><input type="radio" name="p1" value="5" />5</label>
+          <label><input type="radio" name="p1" value="6" />6</label>
+          <label><input type="radio" name="p1" value="7" />7</label>
+        </div>
+        <div class="scale-endpoints"><span>nenhuma</span><span>muita</span></div>
+      </div>
+
+      <div class="q-block">
+        <div class="q-prompt">P2. Quanto gostaste desta corrida?</div>
+        <div class="scale">
+          <label><input type="radio" name="p2" value="1" required />1</label>
+          <label><input type="radio" name="p2" value="2" />2</label>
+          <label><input type="radio" name="p2" value="3" />3</label>
+          <label><input type="radio" name="p2" value="4" />4</label>
+          <label><input type="radio" name="p2" value="5" />5</label>
+          <label><input type="radio" name="p2" value="6" />6</label>
+          <label><input type="radio" name="p2" value="7" />7</label>
+        </div>
+        <div class="scale-endpoints"><span>nada</span><span>muito</span></div>
+      </div>
+
+      <div class="q-block">
+        <div class="q-prompt">P3. Quão envolvido/a te sentiste durante a corrida?</div>
+        <div class="scale">
+          <label><input type="radio" name="p3" value="1" required />1</label>
+          <label><input type="radio" name="p3" value="2" />2</label>
+          <label><input type="radio" name="p3" value="3" />3</label>
+          <label><input type="radio" name="p3" value="4" />4</label>
+          <label><input type="radio" name="p3" value="5" />5</label>
+          <label><input type="radio" name="p3" value="6" />6</label>
+          <label><input type="radio" name="p3" value="7" />7</label>
+        </div>
+        <div class="scale-endpoints"><span>nada</span><span>muito</span></div>
+      </div>
+
+      <div class="q-block q-ghost-only">
+        <div class="q-prompt">P4. Quanto sentiste que estavas efetivamente a perseguir outro corredor?</div>
+        <div class="scale">
+          <label><input type="radio" name="p4" value="1" />1</label>
+          <label><input type="radio" name="p4" value="2" />2</label>
+          <label><input type="radio" name="p4" value="3" />3</label>
+          <label><input type="radio" name="p4" value="4" />4</label>
+          <label><input type="radio" name="p4" value="5" />5</label>
+          <label><input type="radio" name="p4" value="6" />6</label>
+          <label><input type="radio" name="p4" value="7" />7</label>
+        </div>
+        <div class="scale-endpoints"><span>nada</span><span>muito</span></div>
+      </div>
+
+      <div class="q-block q-ghost-only">
+        <div class="q-prompt">P5. Sentiste vontade de acelerar especificamente para diminuir a distância ao Ghost?</div>
+        <div class="scale">
+          <label><input type="radio" name="p5" value="1" />1</label>
+          <label><input type="radio" name="p5" value="2" />2</label>
+          <label><input type="radio" name="p5" value="3" />3</label>
+          <label><input type="radio" name="p5" value="4" />4</label>
+          <label><input type="radio" name="p5" value="5" />5</label>
+          <label><input type="radio" name="p5" value="6" />6</label>
+          <label><input type="radio" name="p5" value="7" />7</label>
+        </div>
+        <div class="scale-endpoints"><span>nada</span><span>muito</span></div>
+      </div>
+
+      <div class="q-block q-ghost-only">
+        <div class="q-prompt">P6. A presença do Ghost fez com que prestasses menos atenção à sensação de monotonia?</div>
+        <div class="scale">
+          <label><input type="radio" name="p6" value="1" />1</label>
+          <label><input type="radio" name="p6" value="2" />2</label>
+          <label><input type="radio" name="p6" value="3" />3</label>
+          <label><input type="radio" name="p6" value="4" />4</label>
+          <label><input type="radio" name="p6" value="5" />5</label>
+          <label><input type="radio" name="p6" value="6" />6</label>
+          <label><input type="radio" name="p6" value="7" />7</label>
+        </div>
+        <div class="scale-endpoints"><span>discordo totalmente</span><span>concordo totalmente</span></div>
+      </div>
+
+      <div class="q-block">
+        <div class="q-prompt">P7. Farias voluntariamente outra corrida com esta experiência nos próximos dias?</div>
+        <div class="scale">
+          <label><input type="radio" name="p7" value="1" required />1</label>
+          <label><input type="radio" name="p7" value="2" />2</label>
+          <label><input type="radio" name="p7" value="3" />3</label>
+          <label><input type="radio" name="p7" value="4" />4</label>
+          <label><input type="radio" name="p7" value="5" />5</label>
+          <label><input type="radio" name="p7" value="6" />6</label>
+          <label><input type="radio" name="p7" value="7" />7</label>
+        </div>
+        <div class="scale-endpoints"><span>certamente não</span><span>certamente sim</span></div>
+      </div>
+
+      <div class="q-block">
+        <label for="p8">P8. Numa frase: qual foi a parte mais interessante ou mais irritante da experiência?</label>
+        <textarea id="p8" name="p8"></textarea>
+      </div>
+
+      <div class="q-block">
+        <label for="rpe">Esforço percebido (RPE, 0–10)</label>
+        <select id="rpe" name="rpe" class="rpe-select" required>
+          <option value="">—</option>
+          <option value="0">0 — nenhum esforço</option>
+          <option value="1">1</option>
+          <option value="2">2 — leve</option>
+          <option value="3">3</option>
+          <option value="4">4 — moderado</option>
+          <option value="5">5</option>
+          <option value="6">6 — intenso</option>
+          <option value="7">7</option>
+          <option value="8">8 — muito intenso</option>
+          <option value="9">9</option>
+          <option value="10">10 — esforço máximo</option>
+        </select>
+      </div>
+
+      <button id="btn-save-questionnaire" class="btn-primary" type="submit">Guardar sessão</button>
+    </form>
+  </section>
+
+  <!-- ============================== EXPORT =============================== -->
+  <section id="screen-export" class="hidden">
+    <h1>Sessão guardada</h1>
+    <div id="export-summary" class="export-summary"></div>
+    <button id="btn-download-json" class="btn-primary" type="button">Descarregar JSON</button>
+    <button id="btn-download-csv" class="btn-secondary" type="button">Descarregar CSV</button>
+    <button id="btn-new-session" class="btn-secondary" type="button">Nova sessão</button>
+    <p class="footnote">
+      Guarda os dois ficheiros num local seguro (ex.: enviar para o investigador) antes de fechar o browser.
+      Este protótipo não tem servidor — nada é enviado automaticamente.
+    </p>
+    <details class="fallback-details">
+      <summary>O download não apareceu? Copiar manualmente</summary>
+      <textarea id="fallback-text" readonly class="fallback-textarea"></textarea>
+    </details>
+  </section>
+
+  <p class="footnote">Ghost Audio v0 · protótipo de investigação</p>
+</div>
+
+<script>
+/**
+ * engine.js — pure decision/computation logic for the Ghost Audio.
+ *
+ * No DOM, no navigator.*, no Web Audio, no fetch. Everything here is a pure
+ * function (or a pure reducer taking/returning plain state objects), so it
+ * can run identically in Node (for tests) and in the browser (loaded as a
+ * plain <script>, exposing itself as window.GhostEngine).
+ *
+ * app.js is the only file allowed to touch browser APIs; it calls into this
+ * module for every decision that matters (position estimate, Ghost position,
+ * gap, what — if anything — to say out loud).
+ */
+
+// ---------------------------------------------------------------------------
+// Geometry
+// ---------------------------------------------------------------------------
+
+const EARTH_RADIUS_M = 6371000;
+
+function haversineMeters(a, b) {
+  const lat1 = (a.lat * Math.PI) / 180;
+  const lat2 = (b.lat * Math.PI) / 180;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLon = ((b.lon - a.lon) * Math.PI) / 180;
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(Math.min(1, h)));
+}
+
+// Local flat-earth projection around `origin`, valid for the few-tens-of-
+// metres scale of one GPX segment. This is intentionally NOT a geodesic
+// (Vincenty) projection — at running distances the error is a few
+// millimetres, far below GPS noise, so the simpler formula is the right
+// trade-off here.
+function toLocalXY(origin, p) {
+  const latRad = (origin.lat * Math.PI) / 180;
+  const dLat = ((p.lat - origin.lat) * Math.PI) / 180;
+  const dLon = ((p.lon - origin.lon) * Math.PI) / 180;
+  return {
+    x: dLon * Math.cos(latRad) * EARTH_RADIUS_M,
+    y: dLat * EARTH_RADIUS_M,
+  };
+}
+
+// Perpendicular distance (metres) from `fix` to the segment p1->p2, plus how
+// far along the segment (0..1) the closest point sits.
+function pointToSegmentDistance(fix, p1, p2) {
+  const a = { x: 0, y: 0 };
+  const b = toLocalXY(p1, p2);
+  const p = toLocalXY(p1, fix);
+  const abx = b.x - a.x;
+  const aby = b.y - a.y;
+  const abLenSq = abx * abx + aby * aby;
+  let t = abLenSq > 0 ? ((p.x - a.x) * abx + (p.y - a.y) * aby) / abLenSq : 0;
+  t = Math.max(0, Math.min(1, t));
+  const projX = a.x + t * abx;
+  const projY = a.y + t * aby;
+  const dx = p.x - projX;
+  const dy = p.y - projY;
+  return { distMeters: Math.sqrt(dx * dx + dy * dy), fraction: t };
+}
+
+// ---------------------------------------------------------------------------
+// GPX parsing
+// ---------------------------------------------------------------------------
+
+/**
+ * Deliberately a small regex-based reader, not a full XML/DOM parser.
+ * Every mainstream export (Garmin, Strava, COROS, Polar) writes flat,
+ * unnamespaced <trkpt lat="" lon=""><ele/><time/></trkpt> records, and a
+ * regex reader behaves IDENTICALLY in Node (tests) and in the browser,
+ * which removes a whole class of "works in tests, breaks on this phone's
+ * browser" bugs. The trade-off: unusual GPX (namespaced tags, extensions,
+ * multi-track files with routes rather than tracks) may not parse. See
+ * README "Limitações conhecidas".
+ */
+function parseGPX(xml) {
+  const trkptRe = /<trkpt\b([^>]*)>([\s\S]*?)<\/trkpt>/g;
+  const latRe = /lat="([^"]+)"/;
+  const lonRe = /lon="([^"]+)"/;
+  const timeRe = /<time>([^<]+)<\/time>/;
+  const eleRe = /<ele>([^<]+)<\/ele>/;
+  const nameMatch = xml.match(/<name>([^<]+)<\/name>/);
+
+  const points = [];
+  let m;
+  while ((m = trkptRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    const body = m[2];
+    const latM = attrs.match(latRe);
+    const lonM = attrs.match(lonRe);
+    if (!latM || !lonM) continue;
+    const lat = parseFloat(latM[1]);
+    const lon = parseFloat(lonM[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    const timeM = body.match(timeRe);
+    const parsedT = timeM ? Date.parse(timeM[1]) : NaN;
+    const eleM = body.match(eleRe);
+    points.push({
+      lat,
+      lon,
+      ele: eleM ? parseFloat(eleM[1]) : null,
+      t: Number.isFinite(parsedT) ? parsedT : null,
+    });
+  }
+
+  const withTime = points.filter((p) => p.t != null).length;
+  return {
+    points,
+    name: nameMatch ? nameMatch[1] : null,
+    hasTimestamps: points.length > 0 && withTime === points.length,
+    partialTimestamps: withTime > 0 && withTime < points.length,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Route model (the physical path, walked at any pace)
+// ---------------------------------------------------------------------------
+
+function buildRoute(points) {
+  const out = [];
+  let cum = 0;
+  for (let i = 0; i < points.length; i++) {
+    if (i > 0) cum += haversineMeters(points[i - 1], points[i]);
+    out.push({ lat: points[i].lat, lon: points[i].lon, cumDist: cum });
+  }
+  return { points: out, totalDistance: cum };
+}
+
+/**
+ * Projects a live GPS fix onto the route polyline: distance-along-route
+ * (cumDist) of the closest point, and how far off the route that fix was
+ * (lateralError, in metres).
+ *
+ * `hint.lastCumDist`, when given, restricts the search to route segments
+ * within `hint.windowMeters` of the runner's last known position. This is
+ * the map-matching safeguard: on an out-and-back or a loop, the return leg
+ * can sit metres from the outbound leg, and a global nearest-point search
+ * would happily snap the runner backwards onto the wrong leg. Searching a
+ * window around the last known position keeps the match on the leg the
+ * runner is actually plausibly on.
+ */
+function projectOntoRoute(route, fix, hint) {
+  const pts = route.points;
+  let segmentIndices = [];
+  if (hint && hint.lastCumDist != null) {
+    const lo = hint.lastCumDist - hint.windowMeters;
+    const hi = hint.lastCumDist + hint.windowMeters;
+    for (let i = 0; i < pts.length - 1; i++) {
+      if (pts[i + 1].cumDist < lo || pts[i].cumDist > hi) continue;
+      segmentIndices.push(i);
+    }
+  }
+  if (segmentIndices.length === 0) {
+    // No hint yet (first fix of the session), or the window came up empty
+    // (e.g. a long GPS gap moved the runner further than the window
+    // allows) — fall back to a full search.
+    for (let i = 0; i < pts.length - 1; i++) segmentIndices.push(i);
+  }
+
+  let best = null;
+  for (const i of segmentIndices) {
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const { distMeters, fraction } = pointToSegmentDistance(fix, p1, p2);
+    if (!best || distMeters < best.distMeters) {
+      const segLen = p2.cumDist - p1.cumDist;
+      best = {
+        distMeters,
+        cumDist: p1.cumDist + fraction * segLen,
+        segmentIndex: i,
+      };
+    }
+  }
+  return { cumDist: best.cumDist, lateralError: best.distMeters, segmentIndex: best.segmentIndex };
+}
+
+// ---------------------------------------------------------------------------
+// Ghost pacing model (distance-over-time, replayed faithfully)
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds D_source(t): cumulative distance as a function of elapsed time,
+ * from the GPX's own recorded timestamps. Points without a timestamp are
+ * dropped (see README on partial-timestamp GPX files). Returns null if
+ * fewer than two timed points exist — a Ghost cannot be paced without at
+ * least one time interval to measure.
+ */
+function buildGhostPacing(points) {
+  const withTime = points.filter((p) => p.t != null);
+  if (withTime.length < 2) return null;
+  const t0 = withTime[0].t;
+  let cum = 0;
+  const events = [{ elapsedMs: 0, cumDist: 0 }];
+  for (let i = 1; i < withTime.length; i++) {
+    cum += haversineMeters(withTime[i - 1], withTime[i]);
+    events.push({ elapsedMs: withTime[i].t - t0, cumDist: cum });
+  }
+  return { events, totalDistance: cum, totalElapsedMs: events[events.length - 1].elapsedMs };
+}
+
+function ghostPositionAt(ghostPacing, elapsedMs) {
+  const ev = ghostPacing.events;
+  if (elapsedMs <= 0) return { cumDist: 0, finished: false };
+  if (elapsedMs >= ghostPacing.totalElapsedMs) {
+    return { cumDist: ghostPacing.totalDistance, finished: true };
+  }
+  let lo = 0;
+  let hi = ev.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (ev[mid].elapsedMs <= elapsedMs) lo = mid;
+    else hi = mid;
+  }
+  const a = ev[lo];
+  const b = ev[hi];
+  const span = b.elapsedMs - a.elapsedMs;
+  const frac = span > 0 ? (elapsedMs - a.elapsedMs) / span : 0;
+  return { cumDist: a.cumDist + frac * (b.cumDist - a.cumDist), finished: false };
+}
+
+// ---------------------------------------------------------------------------
+// GPS position filter (smoothing + outlier rejection)
+// ---------------------------------------------------------------------------
+
+const DEFAULT_FILTER_CONFIG = {
+  maxAccuracyM: 30, // fixes reported noisier than this are not trusted
+  maxPlausibleSpeedMps: 7, // ~4:00/km sprint pace; anything faster between
+  // two accepted fixes is treated as a GPS glitch, not real movement
+  slackM: 4, // small constant allowance on top of speed-implied distance,
+  // to absorb ordinary GPS jitter at low speed
+  smoothingTauS: 3, // time constant (seconds) for exponential smoothing of
+  // sUser — see the note above the alpha calculation below for why this is
+  // a time constant and not a fixed per-update fraction
+  windowMeters: 150, // default map-matching search window, see
+  // projectOntoRoute; filterStep widens this for a given step when the
+  // plausible-movement bound (below) exceeds it
+  lostAfterMs: 8000, // no accepted fix for this long => quality "lost"
+};
+
+/**
+ * One reducer step. `prev` is the filter's previous state (or null for the
+ * first call of a session). `fix` is {lat, lon, accuracyM, speedMps} or
+ * null when this tick had no new GPS reading at all. `nowMs` is the
+ * session-relative timestamp of this tick.
+ *
+ * Returns the new state: { sUser, quality, routeError, lastGoodAtMs }.
+ * `quality` is 'searching' (no fix yet), 'ok', 'weak' (fix rejected but
+ * recent good history exists) or 'lost' (no accepted fix for
+ * cfg.lostAfterMs or more).
+ */
+function filterStep(prev, fix, route, nowMs, config) {
+  const cfg = { ...DEFAULT_FILTER_CONFIG, ...config };
+  const state = prev || {
+    sUser: null,
+    lastGoodAtMs: null,
+    quality: 'searching',
+    routeError: null,
+  };
+
+  if (!fix) {
+    const sinceGood = state.lastGoodAtMs != null ? nowMs - state.lastGoodAtMs : Infinity;
+    return { ...state, quality: sinceGood > cfg.lostAfterMs ? 'lost' : state.quality };
+  }
+
+  if (fix.accuracyM != null && fix.accuracyM > cfg.maxAccuracyM) {
+    const sinceGood = state.lastGoodAtMs != null ? nowMs - state.lastGoodAtMs : Infinity;
+    return { ...state, quality: sinceGood > cfg.lostAfterMs ? 'lost' : 'weak' };
+  }
+
+  // Plausible-movement bound grows with elapsed time since the last
+  // ACCEPTED fix (not since the last tick), and the map-matching search
+  // window is widened to at least that same bound. The two have to move
+  // together: searching only a fixed 150 m window while separately being
+  // willing to accept a jump bigger than that is self-defeating — the
+  // search would clamp the candidate to the window's edge before the
+  // acceptance check below ever saw the true, farther, genuinely-plausible
+  // position. Tying them together is what lets the filter both (a) resist
+  // snapping to the wrong leg of an out-and-back under normal conditions,
+  // where the window stays at its narrow default, and (b) still recover
+  // cleanly after a real GPS gap, where elapsed time alone justifies a
+  // much wider search. (An earlier version of this function kept the
+  // window fixed; a unit test simulating a 60 s GPS gap caught the bug —
+  // see README, "Decisões técnicas".)
+  const dtS = state.lastGoodAtMs != null ? (nowMs - state.lastGoodAtMs) / 1000 : null;
+  const plausibleMax = dtS != null ? cfg.maxPlausibleSpeedMps * Math.max(dtS, 0) + cfg.slackM : null;
+  const searchWindow = plausibleMax != null ? Math.max(cfg.windowMeters, plausibleMax) : cfg.windowMeters;
+
+  const proj = projectOntoRoute(
+    route,
+    fix,
+    state.sUser != null ? { lastCumDist: state.sUser, windowMeters: searchWindow } : null
+  );
+
+  if (state.sUser == null) {
+    return { sUser: proj.cumDist, lastGoodAtMs: nowMs, quality: 'ok', routeError: proj.lateralError };
+  }
+
+  const delta = proj.cumDist - state.sUser;
+
+  if (Math.abs(delta) > plausibleMax) {
+    const sinceGood = nowMs - state.lastGoodAtMs;
+    return { ...state, quality: sinceGood > cfg.lostAfterMs ? 'lost' : 'weak', routeError: proj.lateralError };
+  }
+
+  // Time-constant smoothing rather than a fixed-fraction EMA: the weight
+  // given to this fix grows with how long it has been since the last one,
+  // so closely-spaced fixes (the normal case, roughly every 1-3s) are
+  // damped about as intended, but a fix that arrives after a long,
+  // already-accepted gap is trusted close to fully — rather than creeping
+  // toward the correct position over several more update cycles, which is
+  // what a fixed-fraction EMA would do here (also caught by the same test).
+  const alpha = 1 - Math.exp(-dtS / cfg.smoothingTauS);
+  const sUser = state.sUser + alpha * delta;
+  return { sUser, lastGoodAtMs: nowMs, quality: 'ok', routeError: proj.lateralError };
+}
+
+// ---------------------------------------------------------------------------
+// Gap
+// ---------------------------------------------------------------------------
+
+function computeGap(sUserM, sGhostM) {
+  return sGhostM - sUserM; // positive => Ghost ahead
+}
+
+// ---------------------------------------------------------------------------
+// Audio decision policy
+// ---------------------------------------------------------------------------
+
+const DEFAULT_AUDIO_CONFIG = {
+  sideBySideEnterM: 3,
+  sideBySideExitM: 6,
+  minIntervalS: 12,
+  buckets: [
+    { upTo: 15, step: 5 },
+    { upTo: 50, step: 10 },
+    { upTo: 150, step: 25 },
+    { upTo: Infinity, step: 50 },
+  ],
+};
+
+function roundToStep(v, step) {
+  return Math.round(v / step) * step;
+}
+
+function distanceBucket(absGapM, cfg) {
+  for (const seg of cfg.buckets) {
+    if (absGapM < seg.upTo) return roundToStep(absGapM, seg.step);
+  }
+  const last = cfg.buckets[cfg.buckets.length - 1];
+  return roundToStep(absGapM, last.step);
+}
+
+/**
+ * Turns a raw gap into (at most) one short, spoken-Portuguese event, rate
+ * limited so the runner is never talked at continuously. Three event
+ * families, matching the Phase 1 protocol's audio spec (sec. 10/11A):
+ * distância aproximada + direção (closing/opening), aproximação (folded
+ * into the distance event's direction), and ultrapassagem.
+ *
+ * Pure reducer: (prevState, gapM, nowS, cfg) -> { event, newState }.
+ *
+ * `sign` (who's ahead) is only ever updated while OUTSIDE the side-by-side
+ * band. It is deliberately frozen for the whole time the runner is inside
+ * that band: gap noise there routinely flips the raw sign back and forth
+ * with no real overtake happening, and if `sign` tracked that wobble, the
+ * runner could get a false "ultrapassaste o Ghost" the moment they cleared
+ * the band on the same side they entered it. Freezing it means an overtake
+ * is only ever reported when the side actually changes between two moments
+ * where the runner's position relative to the Ghost was unambiguous.
+ */
+function decideAudioEvent(prevState, gapM, nowS, config) {
+  const cfg = { ...DEFAULT_AUDIO_CONFIG, ...config, buckets: (config && config.buckets) || DEFAULT_AUDIO_CONFIG.buckets };
+  const state = prevState || {
+    lastAnnouncedAt: -Infinity,
+    lastBucket: null,
+    sideBySide: false,
+    sign: null,
+  };
+  const absGap = Math.abs(gapM);
+  const rawSign = gapM > 0 ? 1 : gapM < 0 ? -1 : 0;
+
+  let sideBySide = state.sideBySide;
+  if (!sideBySide && absGap < cfg.sideBySideEnterM) sideBySide = true;
+  if (sideBySide && absGap > cfg.sideBySideExitM) sideBySide = false;
+
+  if (sideBySide) {
+    if (!state.sideBySide) {
+      // Just entered — announce once, `sign` stays whatever it was on entry.
+      return {
+        event: { type: 'side_by_side', text: 'Estás lado a lado com o Ghost.' },
+        newState: { sideBySide: true, sign: state.sign, lastAnnouncedAt: nowS, lastBucket: 0 },
+      };
+    }
+    // Still inside: no event, and — critically — `sign` is not touched.
+    return { event: null, newState: { sideBySide: true, sign: state.sign, lastAnnouncedAt: state.lastAnnouncedAt, lastBucket: state.lastBucket } };
+  }
+
+  // Not (or no longer) side-by-side. A genuine overtake: the last
+  // unambiguous side we recorded differs from the side we're on now.
+  if (state.sign !== null && rawSign !== 0 && rawSign !== state.sign) {
+    const text = rawSign < 0 ? 'Ultrapassaste o Ghost.' : 'O Ghost ultrapassou-te.';
+    return {
+      event: { type: 'overtake', text },
+      newState: { sideBySide: false, sign: rawSign, lastAnnouncedAt: nowS, lastBucket: distanceBucket(absGap, cfg) },
+    };
+  }
+
+  // Regular rate-limited distance update.
+  const bucket = distanceBucket(absGap, cfg);
+  const dueToInterval = nowS - state.lastAnnouncedAt >= cfg.minIntervalS;
+  const bucketChanged = bucket !== state.lastBucket;
+  if (dueToInterval && bucketChanged) {
+    const dir = rawSign > 0 ? 'à frente' : 'atrás';
+    let text;
+    if (state.lastBucket != null && bucket < state.lastBucket) {
+      text = `A aproximares-te. cerca de ${bucket} metros ${dir}.`;
+    } else if (state.lastBucket != null && bucket > state.lastBucket) {
+      text = `A afastares-te, cerca de ${bucket} metros ${dir}.`;
+    } else {
+      text = `Cerca de ${bucket} metros ${dir}.`;
+    }
+    return {
+      event: { type: 'distance', text },
+      newState: { sideBySide: false, sign: rawSign, lastAnnouncedAt: nowS, lastBucket: bucket },
+    };
+  }
+
+  return { event: null, newState: { sideBySide: false, sign: rawSign, lastAnnouncedAt: state.lastAnnouncedAt, lastBucket: state.lastBucket } };
+}
+
+// ---------------------------------------------------------------------------
+// Exports (Node/CommonJS + browser global)
+// ---------------------------------------------------------------------------
+
+const GhostEngine = {
+  haversineMeters,
+  pointToSegmentDistance,
+  parseGPX,
+  buildRoute,
+  projectOntoRoute,
+  buildGhostPacing,
+  ghostPositionAt,
+  filterStep,
+  computeGap,
+  decideAudioEvent,
+  distanceBucket,
+  DEFAULT_FILTER_CONFIG,
+  DEFAULT_AUDIO_CONFIG,
+};
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = GhostEngine;
+}
+if (typeof window !== 'undefined') {
+  window.GhostEngine = GhostEngine;
+}
+</script>
+<script>
+/**
+ * app.js — the only file that touches browser APIs (DOM, navigator.*,
+ * speechSynthesis, localStorage, Blob downloads). All decisions are
+ * delegated to engine.js (window.GhostEngine); this file is wiring.
+ */
+(function () {
+  'use strict';
+
+  const E = window.GhostEngine;
+  const TICK_MS = 1000; // engine "heartbeat" — see note in startTicking()
+  const STORAGE_KEY = 'ghost_inprogress_v1';
+
+  // ---------------------------------------------------------------------
+  // DOM refs
+  // ---------------------------------------------------------------------
+  const $ = (id) => document.getElementById(id);
+  const screens = {
+    setup: $('screen-setup'),
+    running: $('screen-running'),
+    questionnaire: $('screen-questionnaire'),
+    export: $('screen-export'),
+  };
+  const els = {
+    recoveryBanner: $('recovery-banner'),
+    btnRecover: $('btn-recover'),
+    btnDiscardRecovery: $('btn-discard-recovery'),
+
+    pid: $('pid'),
+    group: $('group'),
+    sequence: $('sequence'),
+    session: $('session'),
+    condition: $('condition'),
+    routeLabel: $('route-label'),
+    gpxFile: $('gpx-file'),
+    gpxSummary: $('gpx-summary'),
+    simGpxFile: $('sim-gpx-file'),
+    simSpeed: $('sim-speed'),
+    gpsStatus: $('gps-status'),
+    gpsDot: $('gps-dot'),
+    setupError: $('setup-error'),
+    btnStart: $('btn-start'),
+
+    elapsed: $('running-elapsed'),
+    runningDistance: $('running-distance'),
+    runningGap: $('running-gap'),
+    runningQuality: $('running-quality'),
+    btnTerminar: $('btn-terminar'),
+
+    qForm: $('questionnaire-form'),
+    qGhostOnly: Array.from(document.querySelectorAll('.q-ghost-only')),
+    btnSaveQuestionnaire: $('btn-save-questionnaire'),
+
+    exportSummary: $('export-summary'),
+    fallbackText: $('fallback-text'),
+    btnDownloadJson: $('btn-download-json'),
+    btnDownloadCsv: $('btn-download-csv'),
+    btnNewSession: $('btn-new-session'),
+  };
+
+  function showScreen(name) {
+    Object.entries(screens).forEach(([key, el]) => el.classList.toggle('hidden', key !== name));
+  }
+
+  // ---------------------------------------------------------------------
+  // App state (all in memory; nothing here is engine logic)
+  // ---------------------------------------------------------------------
+  let app = freshAppState();
+
+  function freshAppState() {
+    return {
+      meta: null, // filled at start
+      route: null, // GhostEngine route
+      ghostPacing: null, // null in Control condition, or if disabled
+      filterState: null,
+      audioState: null,
+      ghostFinishedAnnounced: false,
+      startedAtMs: null, // performance.now() at "Iniciar"
+      log: [], // per-second rows
+      latestRawFix: null, // set by geolocation callback / simulator, read by tick
+      simulator: null, // {points, idx, speedMultiplier} when in sim mode
+      tickTimer: null,
+      watchId: null,
+      wakeLock: null,
+      questionnaire: null,
+      endedAtMs: null,
+    };
+  }
+
+  // ---------------------------------------------------------------------
+  // Speech
+  // ---------------------------------------------------------------------
+  function speak(text) {
+    if (!('speechSynthesis' in window)) return;
+    try {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'pt-PT';
+      u.rate = 0.8;
+      window.speechSynthesis.speak(u);
+    } catch (e) {
+      // best-effort only
+    }
+  }
+
+  // One near-silent utterance on the user's own "Iniciar" tap, which many
+  // mobile browsers (notably iOS Safari) require before speechSynthesis
+  // will produce audio from later, non-gesture-triggered calls.
+  function unlockSpeech() {
+    if (!('speechSynthesis' in window)) return;
+    try {
+      const u = new SpeechSynthesisUtterance(' ');
+      u.volume = 0;
+      window.speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+
+  // ---------------------------------------------------------------------
+  // GPX loading
+  // ---------------------------------------------------------------------
+  function readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+      r.readAsText(file);
+    });
+  }
+
+  function formatDuration(totalS) {
+    const s = Math.round(totalS);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    return h > 0
+      ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+      : `${m}:${String(sec).padStart(2, '0')}`;
+  }
+
+  let loadedGpx = null; // { points, name, hasTimestamps, partialTimestamps, route, ghostPacing }
+
+  async function onMainGpxChange() {
+    const file = els.gpxFile.files[0];
+    els.gpxSummary.textContent = '';
+    loadedGpx = null;
+    if (!file) {
+      validateSetup();
+      return;
+    }
+    const text = await readFileAsText(file);
+    const parsed = E.parseGPX(text);
+    if (parsed.points.length < 2) {
+      els.gpxSummary.textContent = 'Não foi possível ler pontos válidos deste GPX.';
+      validateSetup();
+      return;
+    }
+    const route = E.buildRoute(parsed.points);
+    const ghostPacing = parsed.hasTimestamps ? E.buildGhostPacing(parsed.points) : null;
+
+    let durationTxt = 'sem timestamps';
+    if (parsed.hasTimestamps && ghostPacing) durationTxt = formatDuration(ghostPacing.totalElapsedMs / 1000);
+    else if (parsed.partialTimestamps) durationTxt = 'timestamps parciais (insuficiente para Ghost)';
+
+    els.gpxSummary.innerHTML =
+      `<strong>${parsed.name || file.name}</strong> — ${parsed.points.length} pontos, ` +
+      `${(route.totalDistance / 1000).toFixed(2)} km, duração: ${durationTxt}`;
+
+    loadedGpx = { ...parsed, route, ghostPacing };
+    validateSetup();
+  }
+
+  async function onSimGpxChange() {
+    const file = els.simGpxFile.files[0];
+    if (!file) {
+      app.simulator = null;
+      return;
+    }
+    const text = await readFileAsText(file);
+    const parsed = E.parseGPX(text);
+    if (!parsed.hasTimestamps) {
+      setSetupError('O GPX de simulação também precisa de timestamps.');
+      els.simGpxFile.value = '';
+      return;
+    }
+    app.simulator = { points: parsed.points, t0: parsed.points[0].t };
+  }
+
+  // ---------------------------------------------------------------------
+  // GPS acquisition — real or simulated, both just populate
+  // app.latestRawFix; the 1Hz tick is what actually consumes it.
+  // ---------------------------------------------------------------------
+  function startGps() {
+    if (app.simulator) {
+      // Simulated mode: nothing to "watch" — the tick loop below pulls
+      // directly from the simulator's own timestamps.
+      setGpsStatusText('Modo simulado ativo.');
+      return;
+    }
+    if (!('geolocation' in navigator)) {
+      setGpsStatusText('Geolocalização não disponível neste browser.');
+      return;
+    }
+    app.watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        app.latestRawFix = {
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          accuracyM: pos.coords.accuracy,
+          speedMps: pos.coords.speed != null && Number.isFinite(pos.coords.speed) ? pos.coords.speed : null,
+        };
+      },
+      (err) => {
+        setGpsStatusText(`Erro de GPS: ${err.message || err.code}`);
+      },
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 8000 }
+    );
+  }
+
+  function stopGps() {
+    if (app.watchId != null && 'geolocation' in navigator) {
+      navigator.geolocation.clearWatch(app.watchId);
+      app.watchId = null;
+    }
+  }
+
+  function setGpsStatusText(text) {
+    els.gpsStatus.textContent = text;
+  }
+
+  // ---------------------------------------------------------------------
+  // Setup screen: validation + GPS pre-lock before "Iniciar" is enabled
+  // ---------------------------------------------------------------------
+  let preLockFilterState = null;
+
+  function setSetupError(msg) {
+    els.setupError.textContent = msg || '';
+  }
+
+  function validateSetup() {
+    setSetupError('');
+    const condition = els.condition.value;
+    const havePid = els.pid.value.trim().length > 0;
+    const haveGpx = !!loadedGpx;
+    const gpxOkForCondition = haveGpx && (condition === 'control' || loadedGpx.hasTimestamps);
+    const haveGpsLock = preLockFilterState && preLockFilterState.quality === 'ok';
+
+    let reason = '';
+    if (!havePid) reason = 'Indica o Participant ID.';
+    else if (!haveGpx) reason = 'Carrega o GPX do percurso/Ghost.';
+    else if (condition === 'ghost' && !loadedGpx.hasTimestamps) {
+      reason = 'Este GPX não tem timestamps completos — obrigatório para a condição Ghost.';
+    } else if (!haveGpsLock) reason = 'A aguardar sinal de GPS válido (ou carrega um GPX de simulação).';
+
+    els.btnStart.disabled = !!reason;
+    if (reason && (havePid && haveGpx)) setSetupError(reason); // don't nag before the basics are filled
+  }
+
+  // Poll for a GPS lock while on the setup screen, independent of the
+  // session tick loop (which only exists once running).
+  function startPreLockWatch() {
+    stopPreLockWatch();
+    const poll = () => {
+      const fix = app.simulator ? simulatorFixAt(0) : app.latestRawFix;
+      const route = loadedGpx ? loadedGpx.route : null;
+      if (route) {
+        preLockFilterState = E.filterStep(preLockFilterState, fix, route, performance.now(), {});
+        setGpsStatusText(qualityLabel(preLockFilterState.quality));
+        setGpsQualityDot(preLockFilterState.quality);
+      } else if (app.simulator) {
+        setGpsStatusText('Modo simulado pronto.');
+        preLockFilterState = { quality: 'ok' };
+        setGpsQualityDot('ok');
+      }
+      validateSetup();
+    };
+    app._preLockTimer = setInterval(poll, TICK_MS);
+    if ('geolocation' in navigator && !app.simulator) startGps();
+    poll();
+  }
+  function stopPreLockWatch() {
+    if (app._preLockTimer) clearInterval(app._preLockTimer);
+    app._preLockTimer = null;
+  }
+  function simulatorFixAt(elapsedMs) {
+    if (!app.simulator) return null;
+    const pos = E.ghostPositionAt(E.buildGhostPacing(app.simulator.points), elapsedMs);
+    // Convert a route-distance back to a lat/lon by reusing the route
+    // polyline is unnecessary here — simplest correct approach: interpolate
+    // directly against the simulator's own recorded points by elapsed time.
+    const pts = app.simulator.points;
+    const targetMs = elapsedMs;
+    let lo = 0;
+    let hi = pts.length - 1;
+    if (targetMs <= pts[0].t - app.simulator.t0) return { lat: pts[0].lat, lon: pts[0].lon, accuracyM: 5, speedMps: null };
+    if (targetMs >= pts[hi].t - app.simulator.t0) return { lat: pts[hi].lat, lon: pts[hi].lon, accuracyM: 5, speedMps: null };
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (pts[mid].t - app.simulator.t0 <= targetMs) lo = mid;
+      else hi = mid;
+    }
+    const a = pts[lo];
+    const b = pts[hi];
+    const span = b.t - a.t;
+    const frac = span > 0 ? (targetMs - (a.t - app.simulator.t0)) / span : 0;
+    return {
+      lat: a.lat + frac * (b.lat - a.lat),
+      lon: a.lon + frac * (b.lon - a.lon),
+      accuracyM: 5,
+      speedMps: null,
+    };
+  }
+
+  function qualityLabel(q) {
+    return { searching: 'A procurar GPS…', ok: 'GPS OK', weak: 'GPS fraco', lost: 'GPS perdido' }[q] || q;
+  }
+  function setGpsQualityDot(q) {
+    els.gpsDot.style.background = { ok: 'var(--ok)', weak: 'var(--warn)', lost: 'var(--bad)' }[q] || 'var(--text-dim)';
+  }
+
+  // ---------------------------------------------------------------------
+  // Session lifecycle
+  // ---------------------------------------------------------------------
+  function onStart() {
+    const condition = els.condition.value; // 'control' | 'ghost'
+    app.meta = {
+      participant_id: els.pid.value.trim(),
+      group: els.group.value,
+      sequence: els.sequence.value.trim(),
+      session: els.session.value,
+      condition,
+      route_label: els.routeLabel.value.trim(),
+      gpx_name: loadedGpx.name || els.gpxFile.files[0].name,
+      simulated_gps: !!app.simulator,
+      app_version: 'ghost-audio-v0',
+      started_at_iso: new Date().toISOString(),
+    };
+    app.route = loadedGpx.route;
+    app.ghostPacing = condition === 'ghost' ? loadedGpx.ghostPacing : null;
+    app.filterState = preLockFilterState && preLockFilterState.sUser != null ? preLockFilterState : null;
+    app.audioState = null;
+    app.ghostFinishedAnnounced = false;
+    app.log = [];
+    app.startedAtMs = performance.now();
+    app.endedAtMs = null;
+
+    stopPreLockWatch();
+    unlockSpeech();
+    requestWakeLock();
+    if (condition === 'ghost') speak('Perseguição iniciada.');
+
+    startGps();
+    startTicking();
+    showScreen('running');
+  }
+
+  function startTicking() {
+    stopTicking();
+    app.tickTimer = setInterval(tick, TICK_MS);
+  }
+  function stopTicking() {
+    if (app.tickTimer) clearInterval(app.tickTimer);
+    app.tickTimer = null;
+  }
+
+  function tick() {
+    const elapsedMs = performance.now() - app.startedAtMs;
+    const nowS = elapsedMs / 1000; // real wall-clock seconds — deliberately
+    // NOT scaled by the sim speed multiplier, even in simulated mode: the
+    // audio rate limit is about not talking at a real person too often, so
+    // it should always be judged against real elapsed time, regardless of
+    // how fast the simulated position is moving through the route.
+
+    // The Ghost's own position must be queried on the SAME timeline as the
+    // simulated user fix (both scaled by the speed multiplier together) —
+    // otherwise, in simulated mode, the "user" would be fast-forwarding
+    // through the route while the Ghost paced itself in real time, making
+    // the gap meaningless. In real (non-simulated) mode the multiplier is
+    // simply 1.
+    const virtualElapsedMs = app.simulator ? elapsedMs * (Number(els.simSpeed.value) || 1) : elapsedMs;
+
+    const fix = app.simulator ? simulatorFixAt(virtualElapsedMs) : consumeLatestFix();
+
+    // filterStep's internal dtS bookkeeping just needs a consistent
+    // monotonic clock between calls — performance.now() directly, not the
+    // session-relative elapsedMs. This matters because app.filterState can
+    // be carried over from the pre-lock polling phase (see
+    // startPreLockWatch), which timestamps its own calls the same way;
+    // mixing an absolute clock there with a session-relative one here
+    // would make the very first tick see a large, meaningless (even
+    // negative) dtS.
+    app.filterState = E.filterStep(app.filterState, fix, app.route, performance.now(), {});
+
+    let sGhost = null;
+    let gap = null;
+    let audioEvent = null;
+
+    if (app.ghostPacing && app.filterState.sUser != null) {
+      const ghostPos = E.ghostPositionAt(app.ghostPacing, virtualElapsedMs);
+      sGhost = ghostPos.cumDist;
+      gap = E.computeGap(app.filterState.sUser, sGhost);
+      const decision = E.decideAudioEvent(app.audioState, gap, nowS, {});
+      app.audioState = decision.newState;
+      if (decision.event) {
+        audioEvent = decision.event;
+        speak(decision.event.text);
+      }
+      if (ghostPos.finished && !app.ghostFinishedAnnounced) {
+        app.ghostFinishedAnnounced = true;
+        speak('O Ghost terminou o percurso.');
+      }
+    }
+
+    app.log.push({
+      t_iso: new Date().toISOString(),
+      elapsed_s: Number(nowS.toFixed(1)),
+      lat: fix ? fix.lat : null,
+      lon: fix ? fix.lon : null,
+      accuracy_m: fix ? fix.accuracyM : null,
+      speed_mps: fix ? fix.speedMps : null,
+      s_user_m: app.filterState.sUser != null ? Number(app.filterState.sUser.toFixed(1)) : null,
+      s_ghost_m: sGhost != null ? Number(sGhost.toFixed(1)) : null,
+      gap_m: gap != null ? Number(gap.toFixed(1)) : null,
+      route_error_m: app.filterState.routeError != null ? Number(app.filterState.routeError.toFixed(1)) : null,
+      gps_quality: app.filterState.quality,
+      audio_event: audioEvent ? audioEvent.type : null,
+      audio_text: audioEvent ? audioEvent.text : null,
+    });
+
+    if (app.log.length % 10 === 0) persistInProgress();
+    renderRunning(sGhost, gap);
+  }
+
+  // navigator.geolocation callbacks can fire more than once per tick; this
+  // just returns (and clears) whatever the most recent one was, so a tick
+  // never double-counts the same fix and never silently drops the newest one.
+  function consumeLatestFix() {
+    const f = app.latestRawFix;
+    app.latestRawFix = null;
+    return f;
+  }
+
+  function renderRunning(sGhost, gap) {
+    const elapsedS = (performance.now() - app.startedAtMs) / 1000;
+    els.elapsed.textContent = formatDuration(elapsedS);
+    els.runningDistance.textContent =
+      app.filterState.sUser != null ? `${(app.filterState.sUser / 1000).toFixed(2)} km` : '—';
+    els.runningQuality.textContent = qualityLabel(app.filterState.quality);
+    if (app.meta && app.meta.condition === 'ghost' && gap != null) {
+      const dir = gap > 0 ? 'à frente' : gap < 0 ? 'atrás' : 'ao lado';
+      els.runningGap.textContent = `Ghost: ${Math.abs(gap).toFixed(0)} m ${dir}`;
+    } else {
+      els.runningGap.textContent = '';
+    }
+  }
+
+  function onTerminar() {
+    app.endedAtMs = performance.now();
+    stopTicking();
+    stopGps();
+    releaseWakeLock();
+    speak('Sessão terminada.');
+    setupQuestionnaireVisibility();
+    showScreen('questionnaire');
+  }
+
+  function setupQuestionnaireVisibility() {
+    const isGhost = app.meta.condition === 'ghost';
+    els.qGhostOnly.forEach((el) => el.classList.toggle('hidden', !isGhost));
+  }
+
+  function onSaveQuestionnaire() {
+    const fd = new FormData(els.qForm);
+    const get = (name) => fd.get(name);
+    app.questionnaire = {
+      p1_motivacao: get('p1'),
+      p2_gostou: get('p2'),
+      p3_envolvimento: get('p3'),
+      p4_perseguicao: app.meta.condition === 'ghost' ? get('p4') : null,
+      p5_vontade_acelerar: app.meta.condition === 'ghost' ? get('p5') : null,
+      p6_reduziu_monotonia: app.meta.condition === 'ghost' ? get('p6') : null,
+      p7_repetiria: get('p7'),
+      p8_comentario: get('p8') || '',
+      rpe_0_10: get('rpe'),
+    };
+    renderExport();
+    persistInProgress(true);
+    showScreen('export');
+  }
+
+  function sessionSummary() {
+    const distanceM = app.log.length ? app.log[app.log.length - 1].s_user_m || 0 : 0;
+    const durationS = app.endedAtMs != null ? (app.endedAtMs - app.startedAtMs) / 1000 : null;
+    const paceSPerKm = distanceM > 0 && durationS ? durationS / (distanceM / 1000) : null;
+    return { distance_m: Math.round(distanceM), duration_s: Math.round(durationS || 0), pace_s_per_km: paceSPerKm ? Math.round(paceSPerKm) : null };
+  }
+
+  function renderExport() {
+    const s = sessionSummary();
+    const paceTxt = s.pace_s_per_km ? `${Math.floor(s.pace_s_per_km / 60)}:${String(s.pace_s_per_km % 60).padStart(2, '0')}/km` : '—';
+    els.exportSummary.innerHTML =
+      `${app.meta.participant_id} · ${app.meta.session} · ${app.meta.condition} — ` +
+      `${(s.distance_m / 1000).toFixed(2)} km em ${formatDuration(s.duration_s)} (${paceTxt})`;
+  }
+
+  function buildExportBundle() {
+    return {
+      meta: app.meta,
+      questionnaire: app.questionnaire,
+      summary: sessionSummary(),
+      timeseries: app.log,
+    };
+  }
+
+  /**
+   * Three tiers, because no single mechanism is reliable in every place
+   * this file can end up running:
+   *
+   * 1. The claude.ai `downloads` capability — works when this page is
+   *    viewed inside a claude.ai viewer context. A page opened at its own
+   *    published top-level link (exactly how a participant would open it
+   *    on their phone) currently has every capability resolve null, so
+   *    this tier quietly does nothing there — see README, "Como testar em
+   *    campo": that's why self-hosting the standalone file is the
+   *    recommended path for the actual pilot, not the published link.
+   * 2. A standard Blob + <a download> — works on a normal self-hosted
+   *    static page (GitHub Pages, Netlify, a plain server). It does NOT
+   *    work inside a claude.ai-published artifact page — script-started
+   *    saves are inert there — which is exactly why tier 1 exists.
+   * 3. Always, regardless of whether 1 or 2 appeared to work: the same
+   *    content is left in a visible, selectable text box on the export
+   *    screen, collapsed by default, as a copy-paste fallback that has no
+   *    dependency on any download mechanism at all.
+   */
+  async function saveFile(filename, content, mime) {
+    let done = false;
+    if (window.claude && typeof window.claude.use === 'function') {
+      try {
+        const downloads = await window.claude.use('downloads');
+        if (downloads) {
+          await downloads.save({ filename, data: new Blob([content], { type: mime }) });
+          done = true;
+        }
+      } catch (e) {
+        // declined / rate_limited / rejected_extension / etc. — fall
+        // through to tier 2 rather than leaving the export stuck.
+      }
+    }
+    if (!done) {
+      try {
+        const blob = new Blob([content], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+      } catch (e) {
+        // tier 3 (the always-populated fallback box) still covers this.
+      }
+    }
+  }
+
+  function baseFilename() {
+    const m = app.meta;
+    return `ghost_${m.participant_id}_${m.session}_${m.condition}`.replace(/\s+/g, '-');
+  }
+
+  function buildCsv() {
+    const cols = [
+      'participant_id', 'group', 'sequence', 'session', 'condition', 'route_label',
+      't_iso', 'elapsed_s', 'lat', 'lon', 'accuracy_m', 'speed_mps',
+      's_user_m', 's_ghost_m', 'gap_m', 'route_error_m', 'gps_quality',
+      'audio_event', 'audio_text',
+    ];
+    const rows = app.log.map((row) => [
+      app.meta.participant_id, app.meta.group, app.meta.sequence, app.meta.session, app.meta.condition, app.meta.route_label,
+      row.t_iso, row.elapsed_s, row.lat, row.lon, row.accuracy_m, row.speed_mps,
+      row.s_user_m, row.s_ghost_m, row.gap_m, row.route_error_m, row.gps_quality,
+      row.audio_event || '', row.audio_text ? row.audio_text.replace(/"/g, "'") : '',
+    ]);
+    return [cols.join(',')]
+      .concat(rows.map((r) => r.map((v) => (v == null ? '' : `"${v}"`)).join(',')))
+      .join('\n');
+  }
+
+  function onDownloadJson() {
+    const content = JSON.stringify(buildExportBundle(), null, 2);
+    els.fallbackText.value = content;
+    saveFile(`${baseFilename()}.json`, content, 'application/json');
+  }
+
+  function onDownloadCsv() {
+    const content = buildCsv();
+    els.fallbackText.value = content;
+    saveFile(`${baseFilename()}.csv`, content, 'text/csv');
+  }
+
+  function onNewSession() {
+    // Keep participant/group/sequence/route between sessions of the same
+    // participant; only the session number + condition typically change.
+    const keep = { pid: els.pid.value, group: els.group.value, sequence: els.sequence.value, routeLabel: els.routeLabel.value };
+    clearInProgress();
+    app = freshAppState();
+    loadedGpx = null;
+    preLockFilterState = null;
+    els.gpxFile.value = '';
+    els.simGpxFile.value = '';
+    els.gpxSummary.textContent = '';
+    els.qForm.reset();
+    els.pid.value = keep.pid;
+    els.group.value = keep.group;
+    els.sequence.value = keep.sequence;
+    els.routeLabel.value = keep.routeLabel;
+    setSetupError('');
+    showScreen('setup');
+    startPreLockWatch();
+  }
+
+  // ---------------------------------------------------------------------
+  // Wake Lock (best-effort; silently does nothing where unsupported)
+  // ---------------------------------------------------------------------
+  async function requestWakeLock() {
+    try {
+      if ('wakeLock' in navigator) app.wakeLock = await navigator.wakeLock.request('screen');
+    } catch (e) {}
+  }
+  function releaseWakeLock() {
+    try {
+      if (app.wakeLock) app.wakeLock.release();
+    } catch (e) {}
+    app.wakeLock = null;
+  }
+
+  // ---------------------------------------------------------------------
+  // localStorage recovery (page reload mid-run)
+  // ---------------------------------------------------------------------
+  function persistInProgress(finalQuestionnaireSaved) {
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ meta: app.meta, log: app.log, questionnaire: app.questionnaire, endedAtMs: app.endedAtMs, startedAtMs: app.startedAtMs, closed: !!finalQuestionnaireSaved })
+      );
+    } catch (e) {}
+  }
+  function clearInProgress() {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (e) {}
+  }
+  function checkRecovery() {
+    let raw;
+    try {
+      raw = localStorage.getItem(STORAGE_KEY);
+    } catch (e) {
+      return;
+    }
+    if (!raw) return;
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch (e) {
+      clearInProgress();
+      return;
+    }
+    if (!data || !data.meta || data.closed) {
+      clearInProgress();
+      return;
+    }
+    els.recoveryBanner.classList.remove('hidden');
+    els.btnRecover.onclick = () => {
+      app.meta = data.meta;
+      app.log = data.log || [];
+      app.questionnaire = data.questionnaire || null;
+      app.startedAtMs = data.startedAtMs;
+      app.endedAtMs = data.endedAtMs || performance.now();
+      els.recoveryBanner.classList.add('hidden');
+      if (app.questionnaire) {
+        renderExport();
+        showScreen('export');
+      } else {
+        setupQuestionnaireVisibility();
+        showScreen('questionnaire');
+      }
+    };
+    els.btnDiscardRecovery.onclick = () => {
+      clearInProgress();
+      els.recoveryBanner.classList.add('hidden');
+    };
+  }
+
+  // ---------------------------------------------------------------------
+  // Init
+  // ---------------------------------------------------------------------
+  function init() {
+    checkRecovery();
+    els.gpxFile.addEventListener('change', onMainGpxChange);
+    els.simGpxFile.addEventListener('change', onSimGpxChange);
+    els.pid.addEventListener('input', validateSetup);
+    els.condition.addEventListener('change', validateSetup);
+    els.btnStart.addEventListener('click', onStart);
+    els.btnTerminar.addEventListener('click', onTerminar);
+    els.btnSaveQuestionnaire.addEventListener('click', (e) => {
+      e.preventDefault();
+      onSaveQuestionnaire();
+    });
+    els.btnDownloadJson.addEventListener('click', onDownloadJson);
+    els.btnDownloadCsv.addEventListener('click', onDownloadCsv);
+    els.btnNewSession.addEventListener('click', onNewSession);
+
+    showScreen('setup');
+    startPreLockWatch();
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+</body>
+</html>
